@@ -45,7 +45,15 @@ stat_zero = Stat(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
 def copy_stat(st, **kwargs):
     result = Stat(*st)
-    return result._replace(**kwargs)
+
+    for k, v in kwargs.iteritems():
+        setattr(result, k, v)
+
+    result.st_ino = 0
+    # Remove any write bits from st_mode
+    result.st_mode = result.st_mode & ~0222
+
+    return result
 
 
 def git_tree_to_direntries(tree):
@@ -90,11 +98,7 @@ class GitFS(Operations, LoggingMixIn):
     def getattr(self, path, fh=None):
         stat_repo = os.lstat(self.repo.path)
 
-        default_stat_dir = copy_stat(
-            stat_repo, st_ino=0,
-            # Remove any write bits from the file mode
-            st_mode=stat_repo.st_mode & ~0222,
-        )
+        default_stat_dir = copy_stat(stat_repo)
 
         if path == '/':
             return default_stat_dir
@@ -125,9 +129,7 @@ class GitFS(Operations, LoggingMixIn):
             blob = self.repo[entry.oid]
             size = len(blob.data)
 
-            # This is read-only file system
-            mode = entry.attributes & ~0222
-            return copy_stat(stat_repo, st_ino=0, st_size=size, st_mode=mode)
+            return copy_stat(stat_repo, st_size=size, st_mode=entry.attributes)
 
         raise FuseOSError(errno.ENOENT)
 
