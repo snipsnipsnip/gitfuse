@@ -92,7 +92,7 @@ class GitFS(Operations, LoggingMixIn):
 
         default_stat_dir = copy_stat(
             stat_repo, st_ino=0,
-            # This is read-only file system
+            # Remove any write bits from the file mode
             st_mode=stat_repo.st_mode & ~0222,
         )
 
@@ -210,5 +210,6 @@ if __name__ == '__main__':
         sys.exit(0)
 
     logging.getLogger().setLevel(logging.DEBUG)
+
     args = parser.parse_args()
     fuse = FUSE(GitFS(args.git_path), args.mount_path, foreground=True, debug=True)
