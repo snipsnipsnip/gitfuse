@@ -197,4 +197,4 @@ if __name__ == '__main__':
         sys.exit(0)
 
     logging.getLogger().setLevel(logging.DEBUG)
-    # fuse = FUSE(GitFS(arguments.git_path), arguments.mount_path, foreground=True)
+    fuse = FUSE(GitFS(arguments.git_path), arguments.mount_path, foreground=True)
