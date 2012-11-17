@@ -1,0 +1,4 @@
+argparse==1.2.1
+fusepy==2.0.1
+pygit2==0.17.3
+wsgiref==0.1.2
