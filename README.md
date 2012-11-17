@@ -5,7 +5,7 @@ using FUSE.
 
 ## Acknowledments
 
-GitFS was originally forked from (py-gitfs)[https://github.com/temoto/py-gitfs]
+GitFS was originally forked from [py-gitfs](https://github.com/temoto/py-gitfs)
 by Sergey Shepelev.
 
 ## Usage
