@@ -3,11 +3,11 @@
 
 import argparse
 import errno
-import os
-import stat
-import pygit2
-import sys
 import logging
+import os
+import pygit2
+import stat
+import sys
 
 from collections import namedtuple
 from fuse import FuseOSError, FUSE, Operations, LoggingMixIn
