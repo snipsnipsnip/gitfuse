@@ -2,7 +2,9 @@
 # coding: utf-8
 import argparse
 from collections import namedtuple
-import errno, os, stat
+import errno
+import os
+import stat
 import fuse
 import logging
 import pygit2
@@ -56,7 +58,7 @@ def git_tree_find_recursive(tree, path):
     parts = path.split("/")
     tree = reduce(lambda t, name: (t[name].to_object() if t is not None else None),
                   parts[:-1], tree)
-    if tree is None: # dir1
+    if tree is None:  # dir1
         return None
     entry = tree[parts[-1]]
     return entry
@@ -82,7 +84,7 @@ class GitFS(fuse.Fuse):
         stat_repo = os.lstat(self.repo.path)
         default_stat_dir = copy_stat(stat_repo, st_ino=0,
                                      # This is read-only file system
-                                     st_mode=stat_repo.st_mode &~ 0222)
+                                     st_mode=stat_repo.st_mode & ~0222)
 
         if path == "/":
             return default_stat_dir
@@ -100,10 +102,10 @@ class GitFS(fuse.Fuse):
         # Path is strict child of a ref? Example: /heads/master/dir/subdir/README.txt
         matching = [ref for ref in refs if path.startswith(ref + "/")]
         if len(matching) == 1:
-            ref_name = matching[0] # /heads/master
+            ref_name = matching[0]  # /heads/master
             ref = self.repo.lookup_reference("refs" + ref_name)
             commit = self.repo[ref.oid]
-            file_path = path[len(ref_name) + 1:] # dir/subdir/README.txt
+            file_path = path[len(ref_name) + 1:]  # dir/subdir/README.txt
             entry = git_tree_find_recursive(commit.tree, file_path)
             if entry is None:
                 return -errno.ENOENT
@@ -113,7 +115,7 @@ class GitFS(fuse.Fuse):
             blob = self.repo[entry.oid]
             size = len(blob.data)
             # This is read-only file system
-            mode = entry.attributes &~ 0222
+            mode = entry.attributes & ~0222
             return copy_stat(stat_repo, st_ino=0, st_size=size, st_mode=mode)
 
         return -errno.ENOENT
@@ -145,10 +147,10 @@ class GitFS(fuse.Fuse):
         # Path is strict child of a ref? Example: /heads/master/dir1/subdir
         matching = [ref for ref in refs if path.startswith(ref + "/")]
         if len(matching) == 1:
-            ref_name = matching[0] # /heads/master
+            ref_name = matching[0]  # /heads/master
             ref = self.repo.lookup_reference("refs" + ref_name)
             commit = self.repo[ref.oid]
-            file_path = path[len(ref_name) + 1:] # dir1/subdir
+            file_path = path[len(ref_name) + 1:]  # dir1/subdir
             entry = git_tree_find_recursive(commit.tree, file_path)
             if entry is None:
                 return -errno.ENOENT
@@ -178,8 +180,8 @@ class GitFS(fuse.Fuse):
         # Path is strict child of a ref? Example: /heads/master/README.txt
         matching = [ref for ref in refs if path.startswith(ref + "/")]
         if len(matching) == 1:
-            ref_name = matching[0] # /heads/master
-            file_path = path[len(ref_name) + 1:] # README.txt
+            ref_name = matching[0]  # /heads/master
+            file_path = path[len(ref_name) + 1:]  # README.txt
             ref = self.repo.lookup_reference("refs" + ref_name)
             commit = self.repo[ref.oid]
             entry = git_tree_find_recursive(commit.tree, file_path)
