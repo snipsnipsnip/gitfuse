@@ -13,25 +13,38 @@ from collections import namedtuple
 from fuse import FuseOSError, FUSE, Operations, LoggingMixIn
 
 
-StatT = namedtuple('StatT', ['st_mode', 'st_ino', 'st_dev', 'st_nlink', 'st_uid', 'st_gid', 'st_size', 'st_atime', 'st_mtime', 'st_ctime'])
+# st_mode:  protection bits
+# st_ino:   inode number
+# st_dev:   device
+# st_nlink: number of hard links
+# st_uid:   user ID of owner
+# st_gid:   group ID of owner
+# st_size:  size of file, in bytes
+# st_atime: time of most recent access
+# st_mtime: time of most recent content modification
+# st_ctime: platform dependent; time of most recent metadata change on Unix, or
+#           the time of creation on Windows
+Stat = namedtuple(
+    'Stat',
+    [
+        'st_mode',
+        'st_ino',
+        'st_dev',
+        'st_nlink',
+        'st_uid',
+        'st_gid',
+        'st_size',
+        'st_atime',
+        'st_mtime',
+        'st_ctime',
+    ]
+)
 
-##|  st_mode:  protection bits
-##|  st_ino:   inode number
-##|  st_dev:   device
-##|  st_nlink: number of hard links
-##|  st_uid:   user ID of owner
-##|  st_gid:   group ID of owner
-##|  st_size:  size of file, in bytes
-##|  st_atime: time of most recent access
-##|  st_mtime: time of most recent content modification
-##|  st_ctime: platform dependent; time of most recent metadata change on Unix,
-##|            or the time of creation on Windows
-
-stat_zero = StatT(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+stat_zero = Stat(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
 
 def copy_stat(st, **kwargs):
-    result = StatT(*st)
+    result = Stat(*st)
     return result._replace(**kwargs)
 
 
