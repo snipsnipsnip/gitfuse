@@ -95,41 +95,63 @@ class GitFS(Operations, LoggingMixIn):
             )
 
     def getattr(self, path, fh=None):
-        stat_repo = os.lstat(self.repo.path)
-
-        default_stat_dir = copy_stat(stat_repo)
-
-        if path == '/':
-            return default_stat_dir
-
         if path.startswith('/.'):
             raise FuseOSError(errno.ENOENT)
 
-        refs = [s[4:].encode('utf-8') for s in self.repo.listall_references() if s.startswith('refs/')]
+        repo_stat = os.lstat(self.repo.path)
+        default_stat = copy_stat(repo_stat)
 
-        # Path is ref or parent of a ref? Examples: /heads/master, /remotes/origin
-        matching = [ref for ref in refs if ref.startswith(path)]
-        if len(matching) > 0:
-            return default_stat_dir
+        if path == '/':
+            return default_stat
 
-        # Path is strict child of a ref? Example: /heads/master/dir/subdir/README.txt
-        matching = [ref for ref in refs if path.startswith(ref + '/')]
+        refs = [
+            r[4:].encode('utf-8')
+            for r
+            in self.repo.listall_references()
+            if r.startswith('refs/')
+        ]
+
+        # If there are any refs that start with this path, return default stat.
+        # This would mean anything 'above' a ref.
+        if filter(lambda r: r.startswith(path), refs):
+            return default_stat
+
+        # Look for a ref that this path would be a child of.  This would mean
+        # anything 'under' a ref.
+        matching = filter(lambda r: path.startswith(r + '/'), refs)
+        # If a single parent ref is found...
         if len(matching) == 1:
+            # Get ref commit object
             ref_name = matching[0]  # /heads/master
             ref = self.repo.lookup_reference('refs' + ref_name)
             commit = self.repo[ref.oid]
+
+            # Get path of file under ref
             file_path = path[len(ref_name) + 1:]  # dir/subdir/README.txt
+
+            # Get the tree entry for the file path
+            # TODO: In light of new understanding, revisit git_tree_find_recursive
             entry = git_tree_find_recursive(commit.tree, file_path)
+
+            # If not found, no ent
             if entry is None:
                 raise FuseOSError(errno.ENOENT)
-            if entry.attributes & stat.S_IFDIR == stat.S_IFDIR:
-                return default_stat_dir
 
+            # If entry is directory, return default stat
+            if entry.attributes & stat.S_IFDIR == stat.S_IFDIR:
+                return default_stat
+
+            # If stand-alone file, set extra file stats and return
             blob = self.repo[entry.oid]
             size = len(blob.data)
+            return copy_stat(repo_stat, st_size=size, st_mode=entry.attributes)
+        # If, for some reason, more than one ref is found...
+        elif len(matching) > 1:
+            raise self.GitFSError(
+                'Duplicate refs matching path in stat query: {0}'.format(matching)
+            )
 
-            return copy_stat(stat_repo, st_size=size, st_mode=entry.attributes)
-
+        # Fallback to no ent
         raise FuseOSError(errno.ENOENT)
 
     def readdir(self, path, offset):
