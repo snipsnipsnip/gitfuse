@@ -159,7 +159,7 @@ class GitFS(Operations, LoggingMixIn):
         # Fallback to no ent
         raise FuseOSError(errno.ENOENT)
 
-    def readdir(self, path, offset):
+    def readdir(self, path, fh):
         refs = self.refs
 
         # Special case for root directory
@@ -210,35 +210,48 @@ class GitFS(Operations, LoggingMixIn):
 
         return []
 
-    # def open(self, path, flags):
-    #     if path.startswith('/.'):
-    #         return FuseOSError(errno.ENOENT)
+    def open(self, path, flags):
+        if path.startswith('/.'):
+            return FuseOSError(errno.ENOENT)
 
-    #     if flags & os.O_RDONLY != os.O_RDONLY:
-    #         return FuseOSError(errno.EACCES)
+        if flags & os.O_RDONLY != os.O_RDONLY:
+            return FuseOSError(errno.EACCES)
 
-    # def read(self, path, size, offset):
-    #     if path.startswith('/.'):
-    #         return FuseOSError(errno.ENOENT)
+        return 0
 
-    #     refs = [s[4:].encode('utf-8') for s in self.repo.listall_references() if s.startswith('refs/')]
+    def read(self, path, size, offset, fh):
+        if path.startswith('/.'):
+            return FuseOSError(errno.ENOENT)
 
-    #     # Path is strict child of a ref? Example: /heads/master/README.txt
-    #     matching = [ref for ref in refs if path.startswith(ref + '/')]
-    #     if len(matching) == 1:
-    #         ref_name = matching[0]  # /heads/master
-    #         file_path = path[len(ref_name) + 1:]  # README.txt
-    #         ref = self.repo.lookup_reference('refs' + ref_name)
-    #         commit = self.repo[ref.oid]
-    #         entry = git_tree_find(commit.tree, file_path)
-    #         if entry is None:
-    #             return FuseOSError(errno.ENOENT)
-    #         blob = entry.to_object()
-    #         if offset == 0 and len(blob.data) <= size:
-    #             return blob.data
-    #         return blob.data[offset:offset + size]
+        refs = self.refs
 
-    #     return FuseOSError(errno.ENOENT)
+        # Path is a child of a ref?  Example: /heads/master/README.txt
+        matching = filter(lambda r: path.startswith(r + '/'), refs)
+        if len(matching) == 1:
+            ref_name = matching[0]  # /heads/master
+            ref = self.repo.lookup_reference('refs' + ref_name)
+            commit = self.repo[ref.oid]
+
+            file_path = path[len(ref_name) + 1:]  # README.txt
+
+            entry = git_tree_find(commit.tree, file_path)
+
+            if entry is None:
+                return FuseOSError(errno.ENOENT)
+
+            blob = entry.to_object()
+
+            if offset == 0 and len(blob.data) <= size:
+                return blob.data
+
+            return blob.data[offset:offset + size]
+        # If, for some reason, more than one ref is found...
+        elif len(matching) > 1:
+            raise self.GitFSError(
+                'Duplicate refs matching path in read query: {0}'.format(matching)
+            )
+
+        return FuseOSError(errno.ENOENT)
 
 
 if __name__ == '__main__':
