@@ -71,12 +71,13 @@ def git_tree_find(tree, path):
         tree,
     )
 
-    # If file not found...
-    if tree is None:
-        return None
-
     # Get the entry for the last part of the path
-    entry = tree[parts[-1]]
+    try:
+        entry = tree[parts[-1]]
+    except (TypeError, KeyError):
+        # TypeError - reduce returned None
+        # KeyError - file not found in tree
+        entry = None
     return entry
 
 
