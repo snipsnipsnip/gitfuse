@@ -81,19 +81,18 @@ class GitFS(Operations, LoggingMixIn):
     class GitFSError(Exception):
         pass
 
-    def __init__(self, git_path):
-        git_path = os.path.abspath(git_path)
-        dot_git = os.path.join(git_path, '.git')
+    def __init__(self, base_path):
+        base_path = os.path.abspath(base_path)
+        git_path = os.path.join(base_path, '.git')
 
-        if not (os.path.exists(git_path) or os.path.exists(dot_git)):
-            raise self.GitFSError('Neither \'{0}\' or \'{1}\' exists'.format(
-                git_path,
-                dot_git,
-            ))
-
-        self.repo = pygit2.Repository(
-            dot_git if os.path.exists(dot_git) else git_path
-        )
+        if os.path.exists(git_path):
+            self.repo = pygit2.Repository(git_path)
+        elif os.path.exists(base_path):
+            self.repo = pygit2.Repository(base_path)
+        else:
+            raise self.GitFSError(
+                'Path \'{0}\' does not point to a valid repository'.format(base_path)
+            )
 
     def getattr(self, path, fh=None):
         stat_repo = os.lstat(self.repo.path)
