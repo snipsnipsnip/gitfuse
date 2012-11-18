@@ -46,14 +46,14 @@ stat_zero = Stat(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 def copy_stat(st, **kwargs):
     result = Stat(*st)
 
-    for k, v in kwargs.iteritems():
-        setattr(result, k, v)
+    result = result._replace(**kwargs)
+    result = result._replace(
+        st_ino=0,
+        # Remove any write bits from st_mode
+        st_mode=result.st_mode & ~0222,
+    )
 
-    result.st_ino = 0
-    # Remove any write bits from st_mode
-    result.st_mode = result.st_mode & ~0222
-
-    return result
+    return result._asdict()
 
 
 def git_tree_to_direntries(tree):
@@ -154,71 +154,71 @@ class GitFS(Operations, LoggingMixIn):
         # Fallback to no ent
         raise FuseOSError(errno.ENOENT)
 
-    def readdir(self, path, offset):
-        refs = [s[4:].encode('utf-8') for s in self.repo.listall_references() if s.startswith('refs/')]
+    # def readdir(self, path, offset):
+    #     refs = [s[4:].encode('utf-8') for s in self.repo.listall_references() if s.startswith('refs/')]
 
-        # Special case
-        if path == '/':
-            return list(frozenset([parts[1] for parts in [ref.split('/') for ref in refs] if len(parts) > 0]))
+    #     # Special case
+    #     if path == '/':
+    #         return list(frozenset([parts[1] for parts in [ref.split('/') for ref in refs] if len(parts) > 0]))
 
-        # Path is a strict parent of a ref? Example: /remotes
-        path_len_1 = len(path) + 1
-        matching = [ref for ref in refs if ref.startswith(path + '/')]
-        if len(matching) > 0:
-            return list(frozenset([ref[path_len_1:].split('/', 1)[0] for ref in matching if len(ref) > path_len_1]))
+    #     # Path is a strict parent of a ref? Example: /remotes
+    #     path_len_1 = len(path) + 1
+    #     matching = [ref for ref in refs if ref.startswith(path + '/')]
+    #     if len(matching) > 0:
+    #         return list(frozenset([ref[path_len_1:].split('/', 1)[0] for ref in matching if len(ref) > path_len_1]))
 
-        # Path is ref? Example: /heads/master
-        if path in refs:
-            ref = self.repo.lookup_reference('refs' + path)
-            ref = ref.resolve()
-            commit = self.repo[ref.oid]
-            return list(git_tree_to_direntries(commit.tree))
+    #     # Path is ref? Example: /heads/master
+    #     if path in refs:
+    #         ref = self.repo.lookup_reference('refs' + path)
+    #         ref = ref.resolve()
+    #         commit = self.repo[ref.oid]
+    #         return list(git_tree_to_direntries(commit.tree))
 
-        # Path is strict child of a ref? Example: /heads/master/dir1/subdir
-        matching = [ref for ref in refs if path.startswith(ref + '/')]
-        if len(matching) == 1:
-            ref_name = matching[0]  # /heads/master
-            ref = self.repo.lookup_reference('refs' + ref_name)
-            commit = self.repo[ref.oid]
-            file_path = path[len(ref_name) + 1:]  # dir1/subdir
-            entry = git_tree_find_recursive(commit.tree, file_path)
-            if entry is None:
-                raise FuseOSError(errno.ENOENT)
-            if entry.attributes & stat.S_IFDIR == stat.S_IFDIR:
-                subtree = self.repo[entry.oid]
-                return list(git_tree_to_direntries(subtree))
+    #     # Path is strict child of a ref? Example: /heads/master/dir1/subdir
+    #     matching = [ref for ref in refs if path.startswith(ref + '/')]
+    #     if len(matching) == 1:
+    #         ref_name = matching[0]  # /heads/master
+    #         ref = self.repo.lookup_reference('refs' + ref_name)
+    #         commit = self.repo[ref.oid]
+    #         file_path = path[len(ref_name) + 1:]  # dir1/subdir
+    #         entry = git_tree_find_recursive(commit.tree, file_path)
+    #         if entry is None:
+    #             raise FuseOSError(errno.ENOENT)
+    #         if entry.attributes & stat.S_IFDIR == stat.S_IFDIR:
+    #             subtree = self.repo[entry.oid]
+    #             return list(git_tree_to_direntries(subtree))
 
-        return []
+    #     return []
 
-    def open(self, path, flags):
-        if path.startswith('/.'):
-            return FuseOSError(errno.ENOENT)
+    # def open(self, path, flags):
+    #     if path.startswith('/.'):
+    #         return FuseOSError(errno.ENOENT)
 
-        if flags & os.O_RDONLY != os.O_RDONLY:
-            return FuseOSError(errno.EACCES)
+    #     if flags & os.O_RDONLY != os.O_RDONLY:
+    #         return FuseOSError(errno.EACCES)
 
-    def read(self, path, size, offset):
-        if path.startswith('/.'):
-            return FuseOSError(errno.ENOENT)
+    # def read(self, path, size, offset):
+    #     if path.startswith('/.'):
+    #         return FuseOSError(errno.ENOENT)
 
-        refs = [s[4:].encode('utf-8') for s in self.repo.listall_references() if s.startswith('refs/')]
+    #     refs = [s[4:].encode('utf-8') for s in self.repo.listall_references() if s.startswith('refs/')]
 
-        # Path is strict child of a ref? Example: /heads/master/README.txt
-        matching = [ref for ref in refs if path.startswith(ref + '/')]
-        if len(matching) == 1:
-            ref_name = matching[0]  # /heads/master
-            file_path = path[len(ref_name) + 1:]  # README.txt
-            ref = self.repo.lookup_reference('refs' + ref_name)
-            commit = self.repo[ref.oid]
-            entry = git_tree_find_recursive(commit.tree, file_path)
-            if entry is None:
-                return FuseOSError(errno.ENOENT)
-            blob = entry.to_object()
-            if offset == 0 and len(blob.data) <= size:
-                return blob.data
-            return blob.data[offset:offset + size]
+    #     # Path is strict child of a ref? Example: /heads/master/README.txt
+    #     matching = [ref for ref in refs if path.startswith(ref + '/')]
+    #     if len(matching) == 1:
+    #         ref_name = matching[0]  # /heads/master
+    #         file_path = path[len(ref_name) + 1:]  # README.txt
+    #         ref = self.repo.lookup_reference('refs' + ref_name)
+    #         commit = self.repo[ref.oid]
+    #         entry = git_tree_find_recursive(commit.tree, file_path)
+    #         if entry is None:
+    #             return FuseOSError(errno.ENOENT)
+    #         blob = entry.to_object()
+    #         if offset == 0 and len(blob.data) <= size:
+    #             return blob.data
+    #         return blob.data[offset:offset + size]
 
-        return FuseOSError(errno.ENOENT)
+    #     return FuseOSError(errno.ENOENT)
 
 
 if __name__ == '__main__':
