@@ -61,18 +61,21 @@ def git_tree_to_direntries(tree):
         yield entry.name.encode('utf-8')
 
 
-def git_tree_find_recursive(tree, path):
+def git_tree_find(tree, path):
     parts = path.split('/')
 
+    # Advance through sub-trees until end of path
     tree = reduce(
-        lambda t, name: (t[name].to_object() if t is not None else None),
+        lambda t, part: t[part].to_object() if t is not None else None,
         parts[:-1],
         tree,
     )
 
-    if tree is None:  # dir1
+    # If file not found...
+    if tree is None:
         return None
 
+    # Get the entry for the last part of the path
     entry = tree[parts[-1]]
     return entry
 
@@ -130,8 +133,8 @@ class GitFS(Operations, LoggingMixIn):
             file_path = path[len(ref_name) + 1:]  # dir/subdir/README.txt
 
             # Get the tree entry for the file path
-            # TODO: In light of new understanding, revisit git_tree_find_recursive
-            entry = git_tree_find_recursive(commit.tree, file_path)
+            # TODO: In light of new understanding, revisit git_tree_find
+            entry = git_tree_find(commit.tree, file_path)
 
             # If not found, no ent
             if entry is None:
@@ -181,7 +184,7 @@ class GitFS(Operations, LoggingMixIn):
     #         ref = self.repo.lookup_reference('refs' + ref_name)
     #         commit = self.repo[ref.oid]
     #         file_path = path[len(ref_name) + 1:]  # dir1/subdir
-    #         entry = git_tree_find_recursive(commit.tree, file_path)
+    #         entry = git_tree_find(commit.tree, file_path)
     #         if entry is None:
     #             raise FuseOSError(errno.ENOENT)
     #         if entry.attributes & stat.S_IFDIR == stat.S_IFDIR:
@@ -210,7 +213,7 @@ class GitFS(Operations, LoggingMixIn):
     #         file_path = path[len(ref_name) + 1:]  # README.txt
     #         ref = self.repo.lookup_reference('refs' + ref_name)
     #         commit = self.repo[ref.oid]
-    #         entry = git_tree_find_recursive(commit.tree, file_path)
+    #         entry = git_tree_find(commit.tree, file_path)
     #         if entry is None:
     #             return FuseOSError(errno.ENOENT)
     #         blob = entry.to_object()
