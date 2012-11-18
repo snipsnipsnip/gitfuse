@@ -97,6 +97,13 @@ class GitFS(Operations, LoggingMixIn):
                 'Path \'{0}\' does not point to a valid repository'.format(base_path)
             )
 
+    @property
+    def refs(self):
+        """
+        Gets a list of refs minus the leading 'refs' string.
+        """
+        return [r[4:].encode('utf-8') for r in self.repo.listall_references() if r.startswith('refs/')]
+
     def getattr(self, path, fh=None):
         if path.startswith('/.'):
             raise FuseOSError(errno.ENOENT)
@@ -107,12 +114,7 @@ class GitFS(Operations, LoggingMixIn):
         if path == '/':
             return default_stat
 
-        refs = [
-            r[4:].encode('utf-8')
-            for r
-            in self.repo.listall_references()
-            if r.startswith('refs/')
-        ]
+        refs = self.refs
 
         # If there are any refs that start with this path, return default stat.
         # This would mean anything 'above' a ref.
@@ -133,7 +135,6 @@ class GitFS(Operations, LoggingMixIn):
             file_path = path[len(ref_name) + 1:]  # dir/subdir/README.txt
 
             # Get the tree entry for the file path
-            # TODO: In light of new understanding, revisit git_tree_find
             entry = git_tree_find(commit.tree, file_path)
 
             # If not found, no ent
@@ -141,13 +142,13 @@ class GitFS(Operations, LoggingMixIn):
                 raise FuseOSError(errno.ENOENT)
 
             # If entry is directory, return default stat
-            if entry.attributes & stat.S_IFDIR == stat.S_IFDIR:
+            if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
                 return default_stat
 
             # If stand-alone file, set extra file stats and return
             blob = self.repo[entry.oid]
             size = len(blob.data)
-            return copy_stat(repo_stat, st_size=size, st_mode=entry.attributes)
+            return copy_stat(repo_stat, st_size=size, st_mode=entry.filemode)
         # If, for some reason, more than one ref is found...
         elif len(matching) > 1:
             raise self.GitFSError(
@@ -157,41 +158,56 @@ class GitFS(Operations, LoggingMixIn):
         # Fallback to no ent
         raise FuseOSError(errno.ENOENT)
 
-    # def readdir(self, path, offset):
-    #     refs = [s[4:].encode('utf-8') for s in self.repo.listall_references() if s.startswith('refs/')]
+    def readdir(self, path, offset):
+        refs = self.refs
 
-    #     # Special case
-    #     if path == '/':
-    #         return list(frozenset([parts[1] for parts in [ref.split('/') for ref in refs] if len(parts) > 0]))
+        # Special case for root directory
+        if path == '/':
+            parts = [r.split('/') for r in refs]
+            first_parts = [p[1] for p in parts if p]
+            return list(frozenset(first_parts))
 
-    #     # Path is a strict parent of a ref? Example: /remotes
-    #     path_len_1 = len(path) + 1
-    #     matching = [ref for ref in refs if ref.startswith(path + '/')]
-    #     if len(matching) > 0:
-    #         return list(frozenset([ref[path_len_1:].split('/', 1)[0] for ref in matching if len(ref) > path_len_1]))
+        # Path is a parent of a ref?  Example: /remotes
+        # Find all refs that start with this path
+        matching = filter(lambda r: r.startswith(path + '/'), refs)
+        if matching:
+            path_len = len(path) + 1
+            first_parts = [r[path_len:].split('/', 1)[0] for r in matching if len(r) > path_len]
+            return list(frozenset(first_parts))
 
-    #     # Path is ref? Example: /heads/master
-    #     if path in refs:
-    #         ref = self.repo.lookup_reference('refs' + path)
-    #         ref = ref.resolve()
-    #         commit = self.repo[ref.oid]
-    #         return list(git_tree_to_direntries(commit.tree))
+        # Path is ref? Example: /heads/master
+        if path in refs:
+            ref = self.repo.lookup_reference('refs' + path)
+            ref = ref.resolve()
+            commit = self.repo[ref.oid]
+            return list(git_tree_to_direntries(commit.tree))
 
-    #     # Path is strict child of a ref? Example: /heads/master/dir1/subdir
-    #     matching = [ref for ref in refs if path.startswith(ref + '/')]
-    #     if len(matching) == 1:
-    #         ref_name = matching[0]  # /heads/master
-    #         ref = self.repo.lookup_reference('refs' + ref_name)
-    #         commit = self.repo[ref.oid]
-    #         file_path = path[len(ref_name) + 1:]  # dir1/subdir
-    #         entry = git_tree_find(commit.tree, file_path)
-    #         if entry is None:
-    #             raise FuseOSError(errno.ENOENT)
-    #         if entry.attributes & stat.S_IFDIR == stat.S_IFDIR:
-    #             subtree = self.repo[entry.oid]
-    #             return list(git_tree_to_direntries(subtree))
+        # Path is a child of a ref?  Example: /heads/master/dir1/subdir
+        matching = filter(lambda r: path.startswith(r + '/'), refs)
+        if len(matching) == 1:
+            ref_name = matching[0]  # /heads/master
+            ref = self.repo.lookup_reference('refs' + ref_name)
+            commit = self.repo[ref.oid]
 
-    #     return []
+            # Get path of file under ref
+            file_path = path[len(ref_name) + 1:]  # dir1/subdir
+
+            # Get tree entry for the file path
+            entry = git_tree_find(commit.tree, file_path)
+
+            if entry is None:
+                raise FuseOSError(errno.ENOENT)
+
+            if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
+                subtree = self.repo[entry.oid]
+                return list(git_tree_to_direntries(subtree))
+        # If, for some reason, more than one ref is found...
+        elif len(matching) > 1:
+            raise self.GitFSError(
+                'Duplicate refs matching path in readdir query: {0}'.format(matching)
+            )
+
+        return []
 
     # def open(self, path, flags):
     #     if path.startswith('/.'):
