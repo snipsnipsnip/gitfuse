@@ -12,6 +12,7 @@ import sys
 from collections import namedtuple
 from fuse import FuseOSError, FUSE, Operations, LoggingMixIn
 
+
 Stat = namedtuple(
     'Stat',
     [
@@ -160,20 +161,20 @@ class GitFS(Operations, LoggingMixIn):
         repo_stat = os.lstat(self.repo.path)
         default_stat = copy_stat(repo_stat)
 
-        # If there are any refs under this path, return default stat
+        # Path is parent of ref or is ref
         if self.get_child_refs(path):
             return default_stat
 
-        # If a parent ref for this path is found, get the path's tree entry
-        parent = self.get_parent_ref(path)
-        commit = self.get_reference_commit(parent)
-        entry = git_tree_find(commit.tree, path[len(parent) + 1:])
+        # Path is child of ref
+        ref = self.get_parent_ref(path)
+        commit = self.get_reference_commit(ref)
+        entry = git_tree_find(commit.tree, path[len(ref) + 1:])
 
-        # If entry is directory
+        # Path is directory
         if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
             return default_stat
 
-        # If stand-alone file
+        # Path is stand-alone file
         blob = self.repo[entry.oid]
         size = len(blob.data)
         return copy_stat(repo_stat, st_size=size, st_mode=entry.filemode)
@@ -190,11 +191,11 @@ class GitFS(Operations, LoggingMixIn):
             return git_tree_to_direntries(path_tree)
 
         # Path is a child of a ref
-        parent = self.get_parent_ref(path)
-        commit = self.get_reference_commit(parent)
-        entry = git_tree_find(commit.tree, path[len(parent) + 1:])
+        ref = self.get_parent_ref(path)
+        commit = self.get_reference_commit(ref)
+        entry = git_tree_find(commit.tree, path[len(ref) + 1:])
 
-        # If entry is directory
+        # Path is directory
         if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
             subtree = self.repo[entry.oid]
             return git_tree_to_direntries(subtree)
@@ -214,10 +215,10 @@ class GitFS(Operations, LoggingMixIn):
         if path.startswith('/.'):
             raise FuseOSError(errno.ENOENT)
 
-        # Path is a child of a ref?  Example: /heads/master/README.txt
-        parent = self.get_parent_ref(path)
-        commit = self.get_reference_commit(parent)
-        entry = git_tree_find(commit.tree, path[len(parent) + 1:])
+        # Path is a child of ref
+        ref = self.get_parent_ref(path)
+        commit = self.get_reference_commit(ref)
+        entry = git_tree_find(commit.tree, path[len(ref) + 1:])
 
         blob = entry.to_object()
 
