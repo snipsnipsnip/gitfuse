@@ -43,8 +43,7 @@ def copy_stat(st, **kwargs):
 
 
 def git_tree_to_direntries(tree):
-    for entry in tree:
-        yield entry.name.encode('utf-8')
+    return [entry.name.encode('utf-8') for entry in tree]
 
 
 def git_tree_find(tree, path):
@@ -126,6 +125,19 @@ class GitFS(Operations, LoggingMixIn):
         """
         return filter(lambda r: r.startswith(path), self.refs)
 
+    def get_path_children(self, path):
+        """
+        Gets the children under a path which is a parent of a ref.
+
+        Example:
+        >>> gitfs.get_path_children('/')
+        ['remotes']
+        """
+        path_len = 0 if path == '/' else len(path)
+        children = self.get_child_refs(path)
+        children = [r[path_len:].split('/', 2)[1] for r in children if len(r) > path_len]
+        return list(frozenset(children))
+
     def get_reference_commit(self, ref_name):
         """
         Gets the commit object for a named reference.
@@ -145,25 +157,22 @@ class GitFS(Operations, LoggingMixIn):
         default_stat = copy_stat(repo_stat)
 
         # If there are any refs under this path, return default stat
-        if path == '/' or self.get_child_refs(path):
+        if self.get_child_refs(path):
             return default_stat
 
         # If a parent ref for this path is found, get the path's tree entry
         parent = self.get_parent_ref(path)
         commit = self.get_reference_commit(parent)
-        entry = git_tree_find(
-            commit.tree,
-            path[len(parent) + 1:],
-        )
+        entry = git_tree_find(commit.tree, path[len(parent) + 1:])
 
         if entry is None:
             raise FuseOSError(errno.ENOENT)
 
-        # If entry is directory, return default stat
+        # If entry is directory
         if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
             return default_stat
 
-        # If stand-alone file, set extra file stats
+        # If stand-alone file
         blob = self.repo[entry.oid]
         size = len(blob.data)
         return copy_stat(repo_stat, st_size=size, st_mode=entry.filemode)
@@ -171,51 +180,28 @@ class GitFS(Operations, LoggingMixIn):
     def readdir(self, path, fh):
         refs = self.refs
 
-        # Special case for root directory
-        if path == '/':
-            parts = [r.split('/') for r in refs]
-            first_parts = [p[1] for p in parts if p]
-            return list(frozenset(first_parts))
+        # Path is parent of ref
+        children = self.get_path_children(path)
+        if children:
+            return children
 
-        # Path is a parent of a ref?  Example: /remotes
-        # Find all refs that start with this path
-        matching = filter(lambda r: r.startswith(path + '/'), refs)
-        if matching:
-            path_len = len(path) + 1
-            first_parts = [r[path_len:].split('/', 1)[0] for r in matching if len(r) > path_len]
-            return list(frozenset(first_parts))
-
-        # Path is ref? Example: /heads/master
+        # Path is ref
         if path in refs:
-            ref = self.repo.lookup_reference('refs' + path)
-            ref = ref.resolve()
-            commit = self.repo[ref.oid]
-            return list(git_tree_to_direntries(commit.tree))
+            path_tree = self.get_reference_commit(path).tree
+            return git_tree_to_direntries(path_tree)
 
-        # Path is a child of a ref?  Example: /heads/master/dir1/subdir
-        matching = filter(lambda r: path.startswith(r + '/'), refs)
-        if len(matching) == 1:
-            ref_name = matching[0]  # /heads/master
-            ref = self.repo.lookup_reference('refs' + ref_name)
-            commit = self.repo[ref.oid]
+        # Path is a child of a ref
+        parent = self.get_parent_ref(path)
+        commit = self.get_reference_commit(parent)
+        entry = git_tree_find(commit.tree, path[len(parent) + 1:])
 
-            # Get path of file under ref
-            file_path = path[len(ref_name) + 1:]  # dir1/subdir
+        if entry is None:
+            raise FuseOSError(errno.ENOENT)
 
-            # Get tree entry for the file path
-            entry = git_tree_find(commit.tree, file_path)
-
-            if entry is None:
-                raise FuseOSError(errno.ENOENT)
-
-            if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
-                subtree = self.repo[entry.oid]
-                return list(git_tree_to_direntries(subtree))
-        # If, for some reason, more than one ref is found...
-        elif len(matching) > 1:
-            raise self.GitFSError(
-                'Duplicate refs matching path in readdir query: {0}'.format(matching)
-            )
+        # If entry is directory
+        if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
+            subtree = self.repo[entry.oid]
+            return git_tree_to_direntries(subtree)
 
         return []
 
