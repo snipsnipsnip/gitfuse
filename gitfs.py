@@ -62,7 +62,7 @@ def git_tree_find(tree, path):
     except (TypeError, KeyError):
         # TypeError - reduce returned None
         # KeyError - file not found in tree
-        entry = None
+        raise FuseOSError(errno.ENOENT)
     return entry
 
 
@@ -135,7 +135,11 @@ class GitFS(Operations, LoggingMixIn):
         """
         path_len = 0 if path == '/' else len(path)
         children = self.get_child_refs(path)
-        children = [r[path_len:].split('/', 2)[1] for r in children if len(r) > path_len]
+        children = [
+            r[path_len:].split('/', 2)[1]
+            for r in children
+            if len(r) > path_len
+        ]
         return list(frozenset(children))
 
     def get_reference_commit(self, ref_name):
@@ -165,9 +169,6 @@ class GitFS(Operations, LoggingMixIn):
         commit = self.get_reference_commit(parent)
         entry = git_tree_find(commit.tree, path[len(parent) + 1:])
 
-        if entry is None:
-            raise FuseOSError(errno.ENOENT)
-
         # If entry is directory
         if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
             return default_stat
@@ -178,15 +179,13 @@ class GitFS(Operations, LoggingMixIn):
         return copy_stat(repo_stat, st_size=size, st_mode=entry.filemode)
 
     def readdir(self, path, fh):
-        refs = self.refs
-
         # Path is parent of ref
         children = self.get_path_children(path)
         if children:
             return children
 
         # Path is ref
-        if path in refs:
+        if path in self.refs:
             path_tree = self.get_reference_commit(path).tree
             return git_tree_to_direntries(path_tree)
 
@@ -194,9 +193,6 @@ class GitFS(Operations, LoggingMixIn):
         parent = self.get_parent_ref(path)
         commit = self.get_reference_commit(parent)
         entry = git_tree_find(commit.tree, path[len(parent) + 1:])
-
-        if entry is None:
-            raise FuseOSError(errno.ENOENT)
 
         # If entry is directory
         if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
@@ -207,46 +203,28 @@ class GitFS(Operations, LoggingMixIn):
 
     def open(self, path, flags):
         if path.startswith('/.'):
-            return FuseOSError(errno.ENOENT)
+            raise FuseOSError(errno.ENOENT)
 
         if flags & os.O_RDONLY != os.O_RDONLY:
-            return FuseOSError(errno.EACCES)
+            raise FuseOSError(errno.EACCES)
 
         return 0
 
     def read(self, path, size, offset, fh):
         if path.startswith('/.'):
-            return FuseOSError(errno.ENOENT)
-
-        refs = self.refs
+            raise FuseOSError(errno.ENOENT)
 
         # Path is a child of a ref?  Example: /heads/master/README.txt
-        matching = filter(lambda r: path.startswith(r + '/'), refs)
-        if len(matching) == 1:
-            ref_name = matching[0]  # /heads/master
-            ref = self.repo.lookup_reference('refs' + ref_name)
-            commit = self.repo[ref.oid]
+        parent = self.get_parent_ref(path)
+        commit = self.get_reference_commit(parent)
+        entry = git_tree_find(commit.tree, path[len(parent) + 1:])
 
-            file_path = path[len(ref_name) + 1:]  # README.txt
+        blob = entry.to_object()
 
-            entry = git_tree_find(commit.tree, file_path)
+        if offset == 0 and len(blob.data) <= size:
+            return blob.data
 
-            if entry is None:
-                return FuseOSError(errno.ENOENT)
-
-            blob = entry.to_object()
-
-            if offset == 0 and len(blob.data) <= size:
-                return blob.data
-
-            return blob.data[offset:offset + size]
-        # If, for some reason, more than one ref is found...
-        elif len(matching) > 1:
-            raise self.GitFSError(
-                'Duplicate refs matching path in read query: {0}'.format(matching)
-            )
-
-        return FuseOSError(errno.ENOENT)
+        return blob.data[offset:offset + size]
 
 
 if __name__ == '__main__':
