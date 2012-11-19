@@ -19,3 +19,8 @@ by Sergey Shepelev.
     
     optional arguments:
       -h, --help    show this help message and exit
+
+## License
+
+Please take a moment to review the license governing this software package as
+specified in the `LICENSE` file.
