@@ -12,18 +12,6 @@ import sys
 from collections import namedtuple
 from fuse import FuseOSError, FUSE, Operations, LoggingMixIn
 
-
-# st_mode:  protection bits
-# st_ino:   inode number
-# st_dev:   device
-# st_nlink: number of hard links
-# st_uid:   user ID of owner
-# st_gid:   group ID of owner
-# st_size:  size of file, in bytes
-# st_atime: time of most recent access
-# st_mtime: time of most recent content modification
-# st_ctime: platform dependent; time of most recent metadata change on Unix, or
-#           the time of creation on Windows
 Stat = namedtuple(
     'Stat',
     [
@@ -39,8 +27,6 @@ Stat = namedtuple(
         'st_ctime',
     ]
 )
-
-stat_zero = Stat(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
 
 def copy_stat(st, **kwargs):
@@ -102,8 +88,54 @@ class GitFS(Operations, LoggingMixIn):
     def refs(self):
         """
         Gets a list of refs minus the leading 'refs' string.
+
+        Example:
+        >>> gitfs.refs
+        ['/remotes/origin/master',
+         '/remotes/origin/config-int-types',
+         '/remotes/origin/index-open-cleanup',
+         '/remotes/origin/attr-export',
+         '/remotes/origin/HEAD']
         """
         return [r[4:].encode('utf-8') for r in self.repo.listall_references() if r.startswith('refs/')]
+
+    def get_parent_ref(self, path):
+        """
+        Finds the parent ref for a path.
+
+        Example:
+        >>> gitfs.get_parent_ref('/remotes/origin/master/README.md')
+        '/remotes/origin/master'
+        """
+        matches = filter(lambda r: path.startswith(r + '/'), self.refs)
+        if len(matches) != 1:
+            raise FuseOSError(errno.ENOENT)
+        return matches[0]
+
+    def get_child_refs(self, path):
+        """
+        Finds the refs under a path.
+
+        Example:
+        >>> gitfs.get_child_refs('/remotes')
+        ['/remotes/origin/master',
+         '/remotes/origin/config-int-types',
+         '/remotes/origin/index-open-cleanup',
+         '/remotes/origin/attr-export',
+         '/remotes/origin/HEAD']
+        """
+        return filter(lambda r: r.startswith(path), self.refs)
+
+    def get_reference_commit(self, ref_name):
+        """
+        Gets the commit object for a named reference.
+
+        Example:
+        >>> gitfs.get_reference_commit('/remotes/origin/master')
+        <_pygit2.Commit object at 0xb741d150>
+        """
+        ref = self.repo.lookup_reference('refs' + ref_name)
+        return self.repo[ref.oid]
 
     def getattr(self, path, fh=None):
         if path.startswith('/.'):
@@ -112,52 +144,29 @@ class GitFS(Operations, LoggingMixIn):
         repo_stat = os.lstat(self.repo.path)
         default_stat = copy_stat(repo_stat)
 
-        if path == '/':
+        # If there are any refs under this path, return default stat
+        if path == '/' or self.get_child_refs(path):
             return default_stat
 
-        refs = self.refs
+        # If a parent ref for this path is found, get the path's tree entry
+        parent = self.get_parent_ref(path)
+        commit = self.get_reference_commit(parent)
+        entry = git_tree_find(
+            commit.tree,
+            path[len(parent) + 1:],
+        )
 
-        # If there are any refs that start with this path, return default stat.
-        # This would mean anything 'above' a ref.
-        if filter(lambda r: r.startswith(path), refs):
+        if entry is None:
+            raise FuseOSError(errno.ENOENT)
+
+        # If entry is directory, return default stat
+        if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
             return default_stat
 
-        # Look for a ref that this path would be a child of.  This would mean
-        # anything 'under' a ref.
-        matching = filter(lambda r: path.startswith(r + '/'), refs)
-        # If a single parent ref is found...
-        if len(matching) == 1:
-            # Get ref commit object
-            ref_name = matching[0]  # /heads/master
-            ref = self.repo.lookup_reference('refs' + ref_name)
-            commit = self.repo[ref.oid]
-
-            # Get path of file under ref
-            file_path = path[len(ref_name) + 1:]  # dir/subdir/README.txt
-
-            # Get the tree entry for the file path
-            entry = git_tree_find(commit.tree, file_path)
-
-            # If not found, no ent
-            if entry is None:
-                raise FuseOSError(errno.ENOENT)
-
-            # If entry is directory, return default stat
-            if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
-                return default_stat
-
-            # If stand-alone file, set extra file stats and return
-            blob = self.repo[entry.oid]
-            size = len(blob.data)
-            return copy_stat(repo_stat, st_size=size, st_mode=entry.filemode)
-        # If, for some reason, more than one ref is found...
-        elif len(matching) > 1:
-            raise self.GitFSError(
-                'Duplicate refs matching path in stat query: {0}'.format(matching)
-            )
-
-        # Fallback to no ent
-        raise FuseOSError(errno.ENOENT)
+        # If stand-alone file, set extra file stats
+        blob = self.repo[entry.oid]
+        size = len(blob.data)
+        return copy_stat(repo_stat, st_size=size, st_mode=entry.filemode)
 
     def readdir(self, path, fh):
         refs = self.refs
