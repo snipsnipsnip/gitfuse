@@ -8,7 +8,7 @@ Acknowledments
 ==============
 
 GitFS was originally forked from
-`py-gitfs<https://github.com/temoto/py-gitfs>`_ by Sergey Shepelev.
+py-gitfs_ by Sergey Shepelev.
 
 Usage
 =====
@@ -31,3 +31,5 @@ License
 
 Please take a moment to review the license governing this software package as
 specified in the ``LICENSE`` file.
+
+.. _py-gitfs: https://github.com/temoto/py-gitfs
