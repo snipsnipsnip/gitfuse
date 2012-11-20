@@ -13,6 +13,7 @@ Usage
 -----
 
 ::
+
     usage: gitfs [-h] <git_path> <mount_path>
     
     Mounts the contents of a git repository in read-only mode using FUSE.
