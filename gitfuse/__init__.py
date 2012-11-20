@@ -1,16 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import argparse
 import errno
-import logging
 import os
 import pygit2
 import stat
-import sys
 
 from collections import namedtuple
-from fuse import FuseOSError, FUSE, Operations, LoggingMixIn
+from fuse import FuseOSError, Operations, LoggingMixIn
 
 
 Stat = namedtuple(
@@ -213,20 +210,3 @@ class GitFS(Operations, LoggingMixIn):
         blob = entry.to_object()
 
         return blob.data[offset:offset + size]
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-        description='Mounts the contents of a git repository in read-only mode using FUSE.'
-    )
-    parser.add_argument('git_path', metavar='<git_path>', help='Path to git repository.')
-    parser.add_argument('mount_path', metavar='<mount_path>', help='Path to mount point.')
-
-    if len(sys.argv) != 3:
-        parser.print_help()
-        sys.exit(0)
-
-    logging.getLogger().setLevel(logging.DEBUG)
-
-    args = parser.parse_args()
-    fuse = FUSE(GitFS(args.git_path), args.mount_path, foreground=True, debug=True)
