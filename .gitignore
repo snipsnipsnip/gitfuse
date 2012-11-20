@@ -1,2 +1,5 @@
 mount
 repo
+dist
+build
+gitfuse.egg-info
