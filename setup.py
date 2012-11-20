@@ -7,11 +7,11 @@ def readme():
 
 
 setup(name='gitfuse',
-      version='1.0',
+      version='0.9',
       description='Easily mount git repositories as read-only file systems using FUSE.',
       long_description=readme(),
       classifiers=[
-          'Development Status :: 5 - Production/Stable',
+          'Development Status :: 4 - Beta',
           'Environment :: Console',
           'License :: OSI Approved :: MIT License',
           'Programming Language :: Python :: 2.6',
@@ -23,6 +23,7 @@ setup(name='gitfuse',
       author_email='davesque@gmail.com',
       license='MIT',
       packages=['gitfuse'],
+      scripts=['bin/gitfuse'],
       install_requires=[
           'argparse==1.2.1',
           'fusepy==2.0.1',
