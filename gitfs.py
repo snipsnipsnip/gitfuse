@@ -155,9 +155,6 @@ class GitFS(Operations, LoggingMixIn):
         return self.repo[ref.oid]
 
     def getattr(self, path, fh=None):
-        if path.startswith('/.'):
-            raise FuseOSError(errno.ENOENT)
-
         repo_stat = os.lstat(self.repo.path)
         default_stat = copy_stat(repo_stat)
 
@@ -174,7 +171,7 @@ class GitFS(Operations, LoggingMixIn):
         if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
             return default_stat
 
-        # Path is stand-alone file
+        # Path is stand-alone file, get size and filemode
         blob = self.repo[entry.oid]
         size = len(blob.data)
         return copy_stat(repo_stat, st_size=size, st_mode=entry.filemode)
@@ -203,27 +200,17 @@ class GitFS(Operations, LoggingMixIn):
         return []
 
     def open(self, path, flags):
-        if path.startswith('/.'):
-            raise FuseOSError(errno.ENOENT)
-
         if flags & os.O_RDONLY != os.O_RDONLY:
             raise FuseOSError(errno.EACCES)
 
         return 0
 
     def read(self, path, size, offset, fh):
-        if path.startswith('/.'):
-            raise FuseOSError(errno.ENOENT)
-
         # Path is a child of ref
         ref = self.get_parent_ref(path)
         commit = self.get_reference_commit(ref)
         entry = git_tree_find(commit.tree, path[len(ref) + 1:])
-
         blob = entry.to_object()
-
-        if offset == 0 and len(blob.data) <= size:
-            return blob.data
 
         return blob.data[offset:offset + size]
 
