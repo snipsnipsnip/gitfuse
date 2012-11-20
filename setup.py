@@ -26,9 +26,11 @@ setup(name='gitfuse',
       scripts=['bin/gitfuse'],
       install_requires=[
           'argparse==1.2.1',
+          'pygit2==0.17.3',
           'fusepy==2.0.1',
       ],
       dependency_links=[
           'https://github.com/libgit2/pygit2/tarball/af1c6ca10d7108f22b081436445901284ed9ef13#egg=pygit-0.17.3'
+          'https://github.com/davesque/fusepy/tarball/master#egg=fusepy-2.0.1'
       ],
       zip_safe=False)
