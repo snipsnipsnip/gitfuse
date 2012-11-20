@@ -1,14 +1,18 @@
-# GitFS
+GitFS
+=====
 
 Easily mount git repositories as read-only file systems using FUSE.
 
-## Acknowledments
+Acknowledments
+--------------
 
-GitFS was originally forked from [py-gitfs](https://github.com/temoto/py-gitfs)
-by Sergey Shepelev.
+GitFS was originally forked from
+`py-gitfs<https://github.com/temoto/py-gitfs>`_ by Sergey Shepelev.
 
-## Usage
+Usage
+-----
 
+::
     usage: gitfs [-h] <git_path> <mount_path>
     
     Mounts the contents of a git repository in read-only mode using FUSE.
@@ -20,7 +24,8 @@ by Sergey Shepelev.
     optional arguments:
       -h, --help    show this help message and exit
 
-## License
+License
+-------
 
 Please take a moment to review the license governing this software package as
-specified in the `LICENSE` file.
+specified in the ``LICENSE`` file.
