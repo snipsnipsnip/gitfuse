@@ -31,6 +31,5 @@ setup(name='gitfuse',
       ],
       dependency_links=[
           'https://github.com/libgit2/pygit2/tarball/af1c6ca10d7108f22b081436445901284ed9ef13#egg=pygit2-0.17.3',
-          'https://github.com/davesque/fusepy/tarball/0f653e6e64cbdab6d8a9bf1c62f8b1140ee2dcc2#egg=fusepy-2.0.1',
       ],
       zip_safe=False)
