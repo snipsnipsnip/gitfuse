@@ -28,22 +28,35 @@ Usage
 Known issues
 ============
 
-1. When running `gitfuse` from the command line, the user sees an error similar
-   to the following:
+1. When running `gitfuse` from the command line, the user sees the following
+   error:
 
    ::
 
        ImportError: libgit2.so.0: cannot open shared object file: No such file
        or directory
 
-   This happens when the libgit2 library files cannot be found by the pygit2
-   python module.  There are two ways to fix this problem that I'm aware of:
+   This happens when the libgit2 library files cannot be found by the dynamic
+   linker.  There are two ways to fix this problem that I'm aware of:
 
-        - By manually installing pygit2 with the following command:
+        - By manually installing pygit2 after setting the LD_RUN_PATH
+          environment variable:
 
           ::
 
               export LD_RUN_PATH=/usr/local/lib && python setup.py install
+
+        - By running gitfuse after updating the LD_LIBRARY_PATH environment
+          variable:
+
+          ::
+
+              export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib && gitfuse
+
+    The first of the two methods is the preferred one since it is a permanent
+    fix for the problem on a particular system.  Do not modify the
+    LD_LIBRARY_PATH environment variable as a blanket fix in your .bashrc.
+    Reasons to avoid this can be found in this_ stackoverflow post.
 
 License
 =======
@@ -52,3 +65,4 @@ Please take a moment to review the license governing this software package as
 specified in the ``LICENSE`` file.
 
 .. _py-gitfs: https://github.com/temoto/py-gitfs
+.. _this: http://stackoverflow.com/questions/1099981/why-cant-python-find-shared-objects-that-are-in-directories-in-sys-path
