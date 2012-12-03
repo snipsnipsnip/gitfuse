@@ -65,4 +65,4 @@ Please take a moment to review the license governing this software package as
 specified in the ``LICENSE`` file.
 
 .. _py-gitfs: https://github.com/temoto/py-gitfs
-.. _this: http://stackoverflow.com/questions/1099981/why-cant-python-find-shared-objects-that-are-in-directories-in-sys-path
+.. _this: http://stackoverflow.com/a/1100297/751533
