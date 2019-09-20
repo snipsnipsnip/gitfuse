@@ -34,7 +34,7 @@ def copy_stat(st, **kwargs):
     result = result._replace(
         st_ino=0,
         # Remove any write bits from st_mode
-        st_mode=result.st_mode & ~0222,
+        st_mode=result.st_mode & ~0o222,
     )
 
     return result._asdict()
@@ -104,7 +104,7 @@ class GitFS(Operations, LoggingMixIn):
         >>> gitfs.get_parent_ref('/remotes/origin/master/README.md')
         '/remotes/origin/master'
         """
-        matches = filter(lambda r: path.startswith(r + '/'), self.refs)
+        matches = [r for r in self.refs if path.startswith(r + '/')]
         if len(matches) != 1:
             raise FuseOSError(errno.ENOENT)
         return matches[0]
@@ -121,7 +121,7 @@ class GitFS(Operations, LoggingMixIn):
          '/remotes/origin/attr-export',
          '/remotes/origin/HEAD']
         """
-        return filter(lambda r: r.startswith(path), self.refs)
+        return [r for r in self.refs if r.startswith(path)]
 
     def get_path_children(self, path):
         """
