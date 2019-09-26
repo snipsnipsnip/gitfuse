@@ -6,6 +6,7 @@ import os
 import pygit2
 import stat
 
+from functools import reduce
 from collections import namedtuple
 from fuse import FuseOSError, Operations, LoggingMixIn
 
@@ -41,7 +42,7 @@ def copy_stat(st, **kwargs):
 
 
 def git_tree_to_direntries(tree):
-    return [entry.name.encode('utf-8') for entry in tree]
+    return [entry.name for entry in tree]
 
 
 def git_tree_find(tree, path):
@@ -94,7 +95,7 @@ class GitFS(Operations, LoggingMixIn):
          '/remotes/origin/attr-export',
          '/remotes/origin/HEAD']
         """
-        return [r[4:].encode('utf-8') for r in self.repo.listall_references() if r.startswith('refs/')]
+        return [r[4:] for r in self.repo.listall_references() if r.startswith('refs/')]
 
     def get_parent_ref(self, path):
         """
