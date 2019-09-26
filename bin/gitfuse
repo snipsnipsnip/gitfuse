@@ -22,4 +22,4 @@ if __name__ == '__main__':
     logging.getLogger().setLevel(logging.DEBUG)
 
     args = parser.parse_args()
-    fuse = FUSE(GitFS(args.git_path), args.mount_path, foreground=True, debug=True)
+    fuse = FUSE(GitFS(args.git_path), args.mount_path, foreground=True, debug=True, allow_other=True)
