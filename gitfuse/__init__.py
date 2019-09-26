@@ -45,12 +45,12 @@ def git_tree_to_direntries(tree):
     return [entry.name for entry in tree]
 
 
-def git_tree_find(tree, path):
+def git_tree_find(repo, tree, path):
     parts = path.split('/')
 
     # Advance through sub-trees until end of path
     tree = reduce(
-        lambda t, part: t[part].to_object() if t is not None else None,
+        lambda t, part: repo[t[part].id] if t is not None else None,
         parts[:-1],
         tree,
     )
@@ -150,7 +150,7 @@ class GitFS(Operations, LoggingMixIn):
         <_pygit2.Commit object at 0xb741d150>
         """
         ref = self.repo.lookup_reference('refs' + ref_name)
-        return self.repo[ref.oid]
+        return self.repo[ref.target]
 
     def getattr(self, path, fh=None):
         repo_stat = os.lstat(self.repo.path)
@@ -163,7 +163,7 @@ class GitFS(Operations, LoggingMixIn):
         # Path is child of ref
         ref = self.get_parent_ref(path)
         commit = self.get_reference_commit(ref)
-        entry = git_tree_find(commit.tree, path[len(ref) + 1:])
+        entry = git_tree_find(self.repo, commit.tree, path[len(ref) + 1:])
 
         # Path is directory
         if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
@@ -188,7 +188,7 @@ class GitFS(Operations, LoggingMixIn):
         # Path is a child of a ref
         ref = self.get_parent_ref(path)
         commit = self.get_reference_commit(ref)
-        entry = git_tree_find(commit.tree, path[len(ref) + 1:])
+        entry = git_tree_find(self.repo, commit.tree, path[len(ref) + 1:])
 
         # Path is directory
         if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
@@ -207,7 +207,7 @@ class GitFS(Operations, LoggingMixIn):
         # Path is a child of ref
         ref = self.get_parent_ref(path)
         commit = self.get_reference_commit(ref)
-        entry = git_tree_find(commit.tree, path[len(ref) + 1:])
-        blob = entry.to_object()
+        entry = git_tree_find(self.repo, commit.tree, path[len(ref) + 1:])
+        blob = self.repo[entry.id]
 
         return blob.data[offset:offset + size]
