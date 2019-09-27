@@ -6,6 +6,7 @@ import os
 import pygit2
 import stat
 
+from functools import reduce
 from collections import namedtuple
 from fuse import FuseOSError, Operations, LoggingMixIn
 
@@ -34,22 +35,22 @@ def copy_stat(st, **kwargs):
     result = result._replace(
         st_ino=0,
         # Remove any write bits from st_mode
-        st_mode=result.st_mode & ~0222,
+        st_mode=result.st_mode & ~0o222,
     )
 
     return result._asdict()
 
 
 def git_tree_to_direntries(tree):
-    return [entry.name.encode('utf-8') for entry in tree]
+    return [entry.name for entry in tree]
 
 
-def git_tree_find(tree, path):
+def git_tree_find(repo, tree, path):
     parts = path.split('/')
 
     # Advance through sub-trees until end of path
     tree = reduce(
-        lambda t, part: t[part].to_object() if t is not None else None,
+        lambda t, part: repo[t[part].id] if t is not None else None,
         parts[:-1],
         tree,
     )
@@ -94,7 +95,7 @@ class GitFS(Operations, LoggingMixIn):
          '/remotes/origin/attr-export',
          '/remotes/origin/HEAD']
         """
-        return [r[4:].encode('utf-8') for r in self.repo.listall_references() if r.startswith('refs/')]
+        return [r[4:] for r in self.repo.listall_references() if r.startswith('refs/')]
 
     def get_parent_ref(self, path):
         """
@@ -104,7 +105,7 @@ class GitFS(Operations, LoggingMixIn):
         >>> gitfs.get_parent_ref('/remotes/origin/master/README.md')
         '/remotes/origin/master'
         """
-        matches = filter(lambda r: path.startswith(r + '/'), self.refs)
+        matches = [r for r in self.refs if path.startswith(r + '/')]
         if len(matches) != 1:
             raise FuseOSError(errno.ENOENT)
         return matches[0]
@@ -121,7 +122,7 @@ class GitFS(Operations, LoggingMixIn):
          '/remotes/origin/attr-export',
          '/remotes/origin/HEAD']
         """
-        return filter(lambda r: r.startswith(path), self.refs)
+        return [r for r in self.refs if r.startswith(path)]
 
     def get_path_children(self, path):
         """
@@ -149,7 +150,7 @@ class GitFS(Operations, LoggingMixIn):
         <_pygit2.Commit object at 0xb741d150>
         """
         ref = self.repo.lookup_reference('refs' + ref_name)
-        return self.repo[ref.oid]
+        return self.repo[ref.target]
 
     def getattr(self, path, fh=None):
         repo_stat = os.lstat(self.repo.path)
@@ -162,7 +163,7 @@ class GitFS(Operations, LoggingMixIn):
         # Path is child of ref
         ref = self.get_parent_ref(path)
         commit = self.get_reference_commit(ref)
-        entry = git_tree_find(commit.tree, path[len(ref) + 1:])
+        entry = git_tree_find(self.repo, commit.tree, path[len(ref) + 1:])
 
         # Path is directory
         if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
@@ -187,7 +188,7 @@ class GitFS(Operations, LoggingMixIn):
         # Path is a child of a ref
         ref = self.get_parent_ref(path)
         commit = self.get_reference_commit(ref)
-        entry = git_tree_find(commit.tree, path[len(ref) + 1:])
+        entry = git_tree_find(self.repo, commit.tree, path[len(ref) + 1:])
 
         # Path is directory
         if entry.filemode & stat.S_IFDIR == stat.S_IFDIR:
@@ -206,7 +207,7 @@ class GitFS(Operations, LoggingMixIn):
         # Path is a child of ref
         ref = self.get_parent_ref(path)
         commit = self.get_reference_commit(ref)
-        entry = git_tree_find(commit.tree, path[len(ref) + 1:])
-        blob = entry.to_object()
+        entry = git_tree_find(self.repo, commit.tree, path[len(ref) + 1:])
+        blob = self.repo[entry.id]
 
         return blob.data[offset:offset + size]
